@@ -1,0 +1,51 @@
+env:
+  BUILDKITE_PLUGIN_DOCKER_COMPOSE_IMAGE_REPOSITORY: 123121229777.dkr.ecr.us-west-2.amazonaws.com/expedite-api
+  BUILDKITE_PLUGIN_DOCKER_COMPOSE_CONFIG: expedite-api/docker-compose.yml
+
+steps:
+  - name: ":docker: :package:"
+    plugins:
+      docker-compose:
+        build: app
+    agents:
+      queue: elastic-builders
+
+  - wait
+
+  - block: ':rocket: release staging'
+    branches: "!master"
+
+  - name: ":package:"
+    command: "./expedite-api/scripts/ci-assemble.sh"
+    plugins:
+      docker-compose:
+        run: app
+    agents:
+      queue: elastic
+
+  - wait
+
+  - name: "deploy staging"
+    command: "/bin/bash -l ./expedite-api/scripts/ci-deploy.sh staging"
+    plugins:
+      docker-compose:
+        run: app
+    agents:
+      queue: elastic
+    concurrency: 1
+    concurrency_group: 'staging/expedite-api/deploy'
+
+
+  - block: ':rocket: release production'
+    branches: "master"
+
+  - name: "deploy production"
+    branches: "master"
+    command: "/bin/bash -l ./expedite-api/scripts/ci-deploy.sh production"
+    plugins:
+      docker-compose:
+        run: app
+    agents:
+      queue: elastic
+    concurrency: 1
+    concurrency_group: 'production/expedite-api/deploy'
